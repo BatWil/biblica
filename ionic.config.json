@@ -1,0 +1,8 @@
+{
+  "name": "biblica",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "react-vite",
+  "id": "62419e3e"
+}
