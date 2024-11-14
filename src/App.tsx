@@ -1,87 +1,129 @@
-import { Redirect, Route } from 'react-router-dom';
-import {
-  IonApp,
-  IonIcon,
-  IonLabel,
-  IonRouterOutlet,
-  IonTabBar,
-  IonTabButton,
-  IonTabs,
-  setupIonicReact
-} from '@ionic/react';
-import { IonReactRouter } from '@ionic/react-router';
-import { ellipse, square, triangle } from 'ionicons/icons';
-import Tab1 from './pages/Tab1';
-import Tab2 from './pages/Tab2';
-import Tab3 from './pages/Tab3';
+import React, { useState } from 'react';
+import GameConfig from './components/GameConfig';
+import BibleVerseDisplay from './components/BibleVerseDisplay';
+import GameResult from './components/GameResult';
+import bibleData from './DataBiblia/bibleData.json';
 
-/* Core CSS required for Ionic components to work properly */
-import '@ionic/react/css/core.css';
 
-/* Basic CSS for apps built with Ionic */
-import '@ionic/react/css/normalize.css';
-import '@ionic/react/css/structure.css';
-import '@ionic/react/css/typography.css';
 
-/* Optional CSS utils that can be commented out */
-import '@ionic/react/css/padding.css';
-import '@ionic/react/css/float-elements.css';
-import '@ionic/react/css/text-alignment.css';
-import '@ionic/react/css/text-transformation.css';
-import '@ionic/react/css/flex-utils.css';
-import '@ionic/react/css/display.css';
 
-/**
- * Ionic Dark Mode
- * -----------------------------------------------------
- * For more info, please see:
- * https://ionicframework.com/docs/theming/dark-mode
- */
+import './App.css';
 
-/* import '@ionic/react/css/palettes/dark.always.css'; */
-/* import '@ionic/react/css/palettes/dark.class.css'; */
-import '@ionic/react/css/palettes/dark.system.css';
+const App: React.FC = () => {
+  const [rounds, setRounds] = useState<number>(0);
+  const [timePerRound, setTimePerRound] = useState<number>(30);
+  const [gameStarted, setGameStarted] = useState<boolean>(false);
+  const [gameEnded, setGameEnded] = useState<boolean>(false); // Nuevo estado
+  const [currentRound, setCurrentRound] = useState<number>(1);
+  const [verses, setVerses] = useState<{ verse: string; reference: string }[]>([]);
+  const [correctAnswers, setCorrectAnswers] = useState<number[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
 
-/* Theme variables */
-import './theme/variables.css';
+  const startGame = async (rounds: number, time: number) => {
+    setRounds(rounds);
+    setTimePerRound(time);
+    setGameStarted(true);
+    setGameEnded(false); // Reiniciar el estado al iniciar un nuevo juego
+    setCurrentRound(1);
+    setCorrectAnswers([]); // Reiniciar las respuestas correctas al iniciar el juego
+    await generateVerses(rounds);
+  };
 
-setupIonicReact();
 
-const App: React.FC = () => (
-  <IonApp>
-    <IonReactRouter>
-      <IonTabs>
-        <IonRouterOutlet>
-          <Route exact path="/tab1">
-            <Tab1 />
-          </Route>
-          <Route exact path="/tab2">
-            <Tab2 />
-          </Route>
-          <Route path="/tab3">
-            <Tab3 />
-          </Route>
-          <Route exact path="/">
-            <Redirect to="/tab1" />
-          </Route>
-        </IonRouterOutlet>
-        <IonTabBar slot="bottom">
-          <IonTabButton tab="tab1" href="/tab1">
-            <IonIcon aria-hidden="true" icon={triangle} />
-            <IonLabel>Tab 1</IonLabel>
-          </IonTabButton>
-          <IonTabButton tab="tab2" href="/tab2">
-            <IonIcon aria-hidden="true" icon={ellipse} />
-            <IonLabel>Tab 2</IonLabel>
-          </IonTabButton>
-          <IonTabButton tab="tab3" href="/tab3">
-            <IonIcon aria-hidden="true" icon={square} />
-            <IonLabel>Tab 3</IonLabel>
-          </IonTabButton>
-        </IonTabBar>
-      </IonTabs>
-    </IonReactRouter>
-  </IonApp>
-);
+
+  const generateVerses = async (rounds: number) => {
+    const books = Object.keys(bibleData);
+    const selectedVerses: { verse: string; reference: string }[] = [];
+    setLoading(true);
+  
+    for (let i = 0; i < rounds; i++) {
+      const book = books[Math.floor(Math.random() * books.length)];
+      const bookData = bibleData[book as keyof typeof bibleData]; // Ahora `bookData` tiene el tipo correcto
+  
+      if (!bookData) {
+        selectedVerses.push({
+          verse: "Libro no encontrado.",
+          reference: `${book}`
+        });
+        continue;
+      }
+  
+      const chapters = Object.keys(bookData).length;
+      if (chapters === 0) {
+        selectedVerses.push({
+          verse: "No hay capítulos en el libro.",
+          reference: `${book}`
+        });
+        continue;
+      }
+  
+      const chapter = Math.floor(Math.random() * chapters) + 1;
+      const verseNumber = Math.floor(Math.random() * bookData[String(chapter) as keyof typeof bookData].versiculos) + 1;
+  
+      const url = `https://bible-api.deno.dev/api/read/rv1960/${book.toLowerCase()}/${chapter}/${verseNumber}`;
+      try {
+        const response = await fetch(url);
+        const data = await response.json();
+        if (data && data.verse) {
+          selectedVerses.push({
+            verse: data.verse,
+            reference: `${book} ${chapter}:${verseNumber}`
+          });
+        } else {
+          selectedVerses.push({
+            verse: "No se pudo obtener el verso.",
+            reference: `${book} ${chapter}:${verseNumber}`
+          });
+        }
+      } catch (error) {
+        selectedVerses.push({
+          verse: "Error al obtener el verso.",
+          reference: `${book} ${chapter}:${verseNumber}`
+        });
+      }
+    }
+  
+    setLoading(false);
+    setVerses(selectedVerses);
+  };
+  
+  const nextRound = (found: boolean) => {
+    setCorrectAnswers((prev) => [...prev, found ? 1 : 0]);
+
+    if (currentRound < rounds) {
+      setCurrentRound((prevRound) => prevRound + 1);
+    } else {
+      endGame();
+    }
+  };
+
+  const endGame = () => {
+    setGameStarted(false);
+    setGameEnded(true); // Indicar que el juego ha terminado
+  };
+
+  return (
+    <div className="App">
+      {gameStarted ? (
+        loading ? (
+          <p>Cargando...</p>
+        ) : (
+          currentRound <= rounds && verses.length > 0 ? (
+            <BibleVerseDisplay
+              round={currentRound}
+              timePerRound={timePerRound}
+              verse={verses[currentRound - 1]}
+              onNextRound={nextRound}
+            />
+          ) : null
+        )
+      ) : gameEnded ? (
+        <GameResult rounds={rounds} correctAnswers={correctAnswers} />
+      ) : (
+        <GameConfig onStart={startGame} />
+      )}
+    </div>
+  );
+};
 
 export default App;
